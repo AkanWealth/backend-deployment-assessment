@@ -1,0 +1,22 @@
+# Application source is cloned at deploy time, not committed here
+/app/
+
+# Secrets / local config
+.env
+*.pem
+*.key
+terraform/terraform.tfvars
+terraform/*.auto.tfvars
+
+# Terraform working files
+# terraform.tfstate is intentionally NOT ignored: the assessment requires
+# submitting it. Backups and plan files stay out.
+terraform/.terraform/
+terraform/*.tfstate.backup
+terraform/*.tfplan
+terraform/crash.log
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

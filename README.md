@@ -302,4 +302,3 @@ terraform destroy                         # type "yes"
 | ALB 502/504 | Backend container not listening on 8080 yet. Check `docker compose logs backend`. |
 
 HTTPS (443) is open on the ALB security group as required, but there is no 443 listener because that needs an ACM certificate for a domain you own. Add an `aws_lb_listener` on 443 with `certificate_arn` once you have one.
-# backend-deployment-assessment

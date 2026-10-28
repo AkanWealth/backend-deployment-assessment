@@ -1,0 +1,85 @@
+# MuchToDo backend + MongoDB.
+#
+# Usage:
+#   cp .env.example .env      # then set real values
+#   docker compose up -d --build
+#
+# The app uses MongoDB transactions, so Mongo runs as a single-node replica set.
+# A replica set with auth needs a keyfile; it is generated inside the container
+# at startup, so nothing secret is stored in the repo.
+
+name: muchtodo
+
+services:
+  mongodb:
+    image: mongo:8.0
+    container_name: muchtodo-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USERNAME:-root}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:?Set MONGO_ROOT_PASSWORD in .env}
+      MONGO_INITDB_DATABASE: ${DB_NAME:-much_todo_db}
+    entrypoint:
+      - bash
+      - -c
+      - |
+        set -e
+        mkdir -p /data/keyfile
+        head -c 756 /dev/urandom | base64 > /data/keyfile/mongodb.key
+        chmod 400 /data/keyfile/mongodb.key
+        chown mongodb:mongodb /data/keyfile/mongodb.key
+        exec docker-entrypoint.sh mongod --replSet rs0 --bind_ip_all --keyFile /data/keyfile/mongodb.key
+    # No published port: only the backend can reach Mongo, over the shared network.
+    volumes:
+      - mongo_data:/data/db
+      - mongo_config:/data/configdb
+    healthcheck:
+      # Initiates the replica set on first run, then reports healthy only once
+      # this node is the writable primary.
+      test:
+        - CMD-SHELL
+        - >-
+          mongosh --quiet -u "$${MONGO_INITDB_ROOT_USERNAME}" -p "$${MONGO_INITDB_ROOT_PASSWORD}"
+          --authenticationDatabase admin --eval
+          "try { rs.status() } catch (e) { rs.initiate({_id: 'rs0', members: [{_id: 0, host: 'mongodb:27017'}]}) };
+          quit(db.hello().isWritablePrimary ? 0 : 1)"
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+      start_interval: 3s
+    networks:
+      - muchtodo-net
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: muchtodo-backend:latest
+    container_name: muchtodo-backend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    environment:
+      PORT: "8080"
+      DB_NAME: ${DB_NAME:-much_todo_db}
+      # Override MONGO_URI in .env to use the dedicated MongoDB EC2 instance instead.
+      MONGO_URI: ${MONGO_URI:-mongodb://${MONGO_ROOT_USERNAME:-root}:${MONGO_ROOT_PASSWORD}@mongodb:27017/?authSource=admin&replicaSet=rs0}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?Set JWT_SECRET_KEY in .env}
+      JWT_EXPIRATION_HOURS: ${JWT_EXPIRATION_HOURS:-72}
+      ENABLE_CACHE: "false"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+    ports:
+      - "8080:8080"
+    networks:
+      - muchtodo-net
+
+volumes:
+  mongo_data:
+  mongo_config:
+
+networks:
+  muchtodo-net:
+    driver: bridge

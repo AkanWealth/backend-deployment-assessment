@@ -1,0 +1,15 @@
+# Ignore everything by default, then allow only what the build needs.
+**
+
+!app/Server/MuchToDo/go.mod
+!app/Server/MuchToDo/go.sum
+!app/Server/MuchToDo/cmd/
+!app/Server/MuchToDo/internal/
+!app/Server/MuchToDo/docs/
+
+# Never send these, even inside allowed folders.
+**/*_test.go
+**/*.cp
+**/.env
+**/*.key
+**/.git
